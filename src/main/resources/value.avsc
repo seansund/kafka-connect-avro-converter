@@ -1,0 +1,15 @@
+{
+  "namespace": "com.ibm.eventstreams.connect.avroconverter",
+  "type": "record",
+  "name": "value",
+  "fields": [
+    {
+      "name": "companyName",
+      "type": "string"
+    },
+    {
+      "name": "companyLocation",
+      "type": "string"
+    }
+  ]
+}
