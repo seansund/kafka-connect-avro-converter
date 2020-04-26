@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
-import io.confluent.connect.avro.AvroData;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -21,32 +20,27 @@ import org.apache.kafka.connect.storage.HeaderConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
 
 
-public class AvroConverter implements Converter, HeaderConverter {
-    private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
+public class AvroConverterBackup implements Converter, HeaderConverter {
     private JsonConverter jsonConverter;
     private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
+    private static final Logger logger = LoggerFactory.getLogger(AvroConverterBackup.class);
 
-
-    public AvroConverter() {
+    public AvroConverterBackup() {
         jsonConverter = new JsonConverter();
     }
 
-    /**
-     * The default schema cache size. We pick 50 so that there's room in the cache for some recurring
-     * nested types in a complex schema.
-     */
-    private Integer schemaCacheSize = 50;
-
-    private org.apache.avro.Schema avroSchema = null;
-    private Schema connectSchema = null;
-    private AvroData avroDataHelper = null;
 
     @Override
-    public void close() { jsonConverter.close(); }
+    public void close() {
+        jsonConverter.close();
+    }
 
     //    TODO: throw exception when schemas is enabled
     @Override
@@ -55,15 +49,12 @@ public class AvroConverter implements Converter, HeaderConverter {
     }
 
     @Override
-    public void configure(Map<String, ?> configs) { }
+    public void configure(Map<String, ?> configs) {
+        jsonConverter.configure(configs);
+    }
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
-        if (configs.get("schema.cache.size") instanceof Integer) {
-            schemaCacheSize = (Integer) configs.get("schema.cache.size");
-        }
-
-        avroDataHelper = new AvroData(schemaCacheSize);
         jsonConverter.configure(configs, isKey);
     }
 
@@ -90,13 +81,30 @@ public class AvroConverter implements Converter, HeaderConverter {
         logger.warn(jsonValue.toString());
         logger.warn(jsonValue.getNodeType().toString());
 
+        org.apache.avro.Schema avroSchema = null;
+        try {
+//            TODO: figure how to get schema
+            String fileName = jsonValue.has("messageId") ? "key.avsc" : "value.avsc";
+
+            System.out.println("FILENAME: " + fileName);
+            InputStream in = this.getClass().getClassLoader().getResourceAsStream(fileName);
+            org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
+            avroSchema = parser.parse(in);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        logger.warn("avroSchema");
+        if(avroSchema != null) {
+            logger.warn(avroSchema.toString());
+        }
+
         GenericRecord genericRecord = null;
         try {
             DecoderFactory decoderFactory = new DecoderFactory();
 
-            Decoder decoder = decoderFactory.jsonDecoder(this.avroSchema, jsonValue.toString());
+            Decoder decoder = decoderFactory.jsonDecoder(avroSchema, jsonValue.toString());
             DatumReader<GenericData.Record> reader =
-                    new GenericDatumReader<>(this.avroSchema);
+                    new GenericDatumReader<>(avroSchema);
             genericRecord = reader.read(null, decoder);
         } catch (IOException e) {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
@@ -108,7 +116,7 @@ public class AvroConverter implements Converter, HeaderConverter {
         }
 
 
-        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(this.avroSchema);
+        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
 
@@ -178,38 +186,6 @@ public class AvroConverter implements Converter, HeaderConverter {
 
     @Override
     public byte[] fromConnectHeader(String topic, String headerKey, Schema schema, Object value) {
-        logger.warn("CONNECT HEADER");
-
-        // org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
-        // TODO read schema from header to be used in the fromConnectData etc.
-//        String avroSchema = null; // TODO come from the value
-//        this.avroSchema = parser.parse(avroSchema);
-//        connectSchema = avroDataHelper.toConnectSchema(this.avroSchema);
-
-        byte[] jsonBytes = jsonConverter.fromConnectData(topic, schema, value);
-        JsonNode jsonValue = jsonDeserializer.deserialize(topic, jsonBytes);
-        logger.warn("jsonValue");
-        logger.warn(jsonValue.toString());
-
-        org.apache.avro.Schema avroSchema = null;
-        try {
-//            TODO: figure how to get schema
-            String fileName = jsonValue.has("messageId") ? "key.avsc" : "value.avsc";
-
-            System.out.println("FILENAME: " + fileName);
-            InputStream in = this.getClass().getClassLoader().getResourceAsStream(fileName);
-            org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
-            this.avroSchema = parser.parse(in);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        logger.warn("avroSchema");
-        if(this.avroSchema != null) {
-            logger.warn(avroSchema.toString());
-        }
-
-        logger.warn("CONNECT HEADER");
-
         return jsonConverter.fromConnectHeader(topic, headerKey, schema, value);
     }
 }

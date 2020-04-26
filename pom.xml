@@ -64,6 +64,13 @@
         </plugins>
     </build>
 
+    <repositories>
+        <repository>
+            <id>confluent</id>
+            <url>http://packages.confluent.io/maven/</url>
+        </repository>
+    </repositories>
+
     <properties>
         <kafka.version>2.3.1</kafka.version>
         <jackson.version>2.10.3</jackson.version>
@@ -154,6 +161,14 @@
             <artifactId>connect-json</artifactId>
             <version>${kafka.version}</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.confluent/kafka-connect-avro-converter -->
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-connect-avro-converter</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
     </dependencies>
 
 </project>
