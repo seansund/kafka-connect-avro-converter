@@ -82,14 +82,18 @@ public class AvroConverter implements Converter, HeaderConverter {
         try {
 //            TODO: figure how to get schema
             String fileName = jsonValue.has("messageId") ? "key.avsc" : "value.avsc";
-            String path = String.format("/Users/mdenunez/Documents/projects/tch/kafka-connect-avro-converter/src/main/resources/%s", fileName);
+
+            System.out.println("FILENAME: " + fileName);
+            InputStream in = this.getClass().getClassLoader().getResourceAsStream(fileName);
             org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
-            avroSchema = parser.parse(new File(path));
+            avroSchema = parser.parse(in);
         } catch (IOException e) {
             e.printStackTrace();
         }
         logger.warn("avroSchema");
-        logger.warn(avroSchema.toString());
+        if(avroSchema != null) {
+            logger.warn(avroSchema.toString());
+        }
 
         GenericRecord genericRecord = null;
         try {
@@ -103,7 +107,10 @@ public class AvroConverter implements Converter, HeaderConverter {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
         logger.warn("created generic record");
-        logger.warn(genericRecord.toString());
+
+        if(genericRecord != null) {
+            logger.warn(genericRecord.toString());
+        }
 
 
         DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
