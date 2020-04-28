@@ -62,16 +62,18 @@ public class AvroConverter implements Converter {
     public byte[] fromConnectData(String topic, Headers headers, Schema schema, Object value) {
         logger.info("CONVERTING FROM CONNECT DATA");
         logger.info(topic);
-        logger.info(value.toString());
-        logger.info(headers.toString());
 
-        logger.info("FINDING AVRO SCHEMA");
+        logger.info("IBM AVRO SCHEMA");
         org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
         logger.info(avroSchema.toString());
 
-        logger.info("-- GENERIC RECORD --");
+        logger.info("AVRO STRUCT SCHEMA");
         Schema convertedSchema = avroDataHelper.toConnectSchema(avroSchema);
+        logger.info(convertedSchema.toString());
+
+        logger.info("-- GENERIC RECORD --");
         GenericRecord genericRecord = (GenericRecord)avroDataHelper.fromConnectData(convertedSchema, value);
+        logger.info(genericRecord.toString());
 
         logger.info("-- CONVERTING TO BYTE ARRAY --");
         ByteArrayOutputStream stream = new ByteArrayOutputStream();

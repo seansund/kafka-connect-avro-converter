@@ -32,6 +32,8 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -41,6 +43,7 @@ import java.util.Properties;
 
 public class IBMSchemaRegistry {
 
+    private static final Logger logger = LoggerFactory.getLogger(IBMSchemaRegistry.class);
     private SchemaRegistry schemaRegistry = null;
 
     public IBMSchemaRegistry() {
@@ -54,9 +57,9 @@ public class IBMSchemaRegistry {
     private Properties configure() {
         Properties props = new Properties();
 
-        String trustStoreFilePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("es-cert.jks")).getPath();
-
-        System.out.println("TRUST STORE PATH " + trustStoreFilePath);
+//        String trustStoreFilePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("es-cert.jks")).getPath();
+//
+//        System.out.println("TRUST STORE PATH " + trustStoreFilePath);
 
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, "tch-kafka-dev-ibm-es-proxy-route-bootstrap-eventstreams.tchcluster-cp4i-0143c5dd31acd8e030a1d6e0ab1380e3-0000.us-south.containers.appdomain.cloud:443");
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_SSL");
@@ -86,7 +89,8 @@ public class IBMSchemaRegistry {
         try {
             schema = this.schemaRegistry.getSchema(schemaName, schemaVersion);
         } catch (SchemaRegistryAuthException | SchemaRegistryConnectionException | SchemaRegistryServerErrorException | SchemaRegistryApiException e) {
-            e.printStackTrace();
+            logger.info("WE GOT HERE!!!!NOOO" + e.toString());
+            throw new Error(e);
             // TODO handle this
         }
 
@@ -115,7 +119,11 @@ public class IBMSchemaRegistry {
             }
         }
 
-        return getSchemaInfo(schemaName, schemaVersion).getSchema();
+        logger.info("GETTING SCHEMA!!!");
+        logger.info(schemaName + " " + schemaVersion);
+
+        return this.getSchemaInfo(schemaName, schemaVersion)
+                .getSchema();
     }
 
     public static void main(String[] args) {
