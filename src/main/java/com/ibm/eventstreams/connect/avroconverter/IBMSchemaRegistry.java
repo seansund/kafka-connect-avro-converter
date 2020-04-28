@@ -16,7 +16,7 @@
  *
  */
 
-package com.ibm.eventstreams.connect.avroconverter.schemaregistry;
+package com.ibm.eventstreams.connect.avroconverter;
 
 import com.ibm.eventstreams.serdes.SchemaInfo;
 import com.ibm.eventstreams.serdes.SchemaRegistry;
@@ -25,25 +25,43 @@ import com.ibm.eventstreams.serdes.exceptions.SchemaRegistryApiException;
 import com.ibm.eventstreams.serdes.exceptions.SchemaRegistryAuthException;
 import com.ibm.eventstreams.serdes.exceptions.SchemaRegistryConnectionException;
 import com.ibm.eventstreams.serdes.exceptions.SchemaRegistryServerErrorException;
+import org.apache.avro.Schema;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Properties;
 
 public class IBMSchemaRegistry {
 
+    private SchemaRegistry schemaRegistry = null;
+
+    public IBMSchemaRegistry() {
+        try {
+            this.schemaRegistry = new SchemaRegistry(configure());
+        } catch (KeyManagementException | NoSuchAlgorithmException | SchemaRegistryAuthException | SchemaRegistryServerErrorException | SchemaRegistryApiException | SchemaRegistryConnectionException e) {
+            e.printStackTrace();
+        }
+    }
+
     private Properties configure() {
         Properties props = new Properties();
+
         String trustStoreFilePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("es-cert.jks")).getPath();
+
+        System.out.println("TRUST STORE PATH " + trustStoreFilePath);
 
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, "tch-kafka-dev-ibm-es-proxy-route-bootstrap-eventstreams.tchcluster-cp4i-0143c5dd31acd8e030a1d6e0ab1380e3-0000.us-south.containers.appdomain.cloud:443");
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_SSL");
         props.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLSv1.2");
-        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, trustStoreFilePath);
+        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/aaron.tobias@ibm.com/Documents/es-cert.jks");
         props.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "password");
         props.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
         String saslJaasConfig = "org.apache.kafka.common.security.plain.PlainLoginModule required "
@@ -57,35 +75,52 @@ public class IBMSchemaRegistry {
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "com.ibm.eventstreams.serdes.EventStreamsSerializer");
 
-// Set the encoding type used by the message serializer
+        // Set the encoding type used by the message serializer
         props.put(SchemaRegistryConfig.PROPERTY_ENCODING_TYPE, SchemaRegistryConfig.ENCODING_BINARY);
 
         return props;
     }
 
-    public SchemaInfo getSchema (String schemaName, String schemaVersion) {
-        // Get a new connection to the Schema Registry
-        SchemaRegistry schemaRegistry = null;
-        try {
-            schemaRegistry = new SchemaRegistry(configure());
-        } catch (KeyManagementException | NoSuchAlgorithmException | SchemaRegistryAuthException | SchemaRegistryServerErrorException | SchemaRegistryApiException | SchemaRegistryConnectionException e) {
-            e.printStackTrace();
-        }
-
+    private SchemaInfo getSchemaInfo(String schemaName, String schemaVersion) {
         SchemaInfo schema = null;
-        // Get the schema from the registry
         try {
-            schema = schemaRegistry.getSchema(schemaName, schemaVersion);
+            schema = this.schemaRegistry.getSchema(schemaName, schemaVersion);
         } catch (SchemaRegistryAuthException | SchemaRegistryConnectionException | SchemaRegistryServerErrorException | SchemaRegistryApiException e) {
             e.printStackTrace();
+            // TODO handle this
         }
 
         return schema;
     }
 
+    public Schema getSchema(Headers headers) {
+
+        Iterator<Header> headerIterator = headers.iterator();
+        StringDeserializer stringDeserializer = new StringDeserializer();
+
+        String schemaName = null;
+        String schemaVersion = null;
+
+        while(headerIterator.hasNext()) {
+            Header header = headerIterator.next();
+
+            if(header.key().equals(SchemaRegistryConfig.HEADER_MSG_SCHEMA_ID)) {
+                schemaName = stringDeserializer.deserialize(null, header.value());
+            } else if(header.key().equals(SchemaRegistryConfig.HEADER_MSG_SCHEMA_VERSION)) {
+                schemaVersion = stringDeserializer.deserialize(null, header.value());
+            }
+
+            if (schemaName != null && schemaVersion != null) {
+                break;
+            }
+        }
+
+        return getSchemaInfo(schemaName, schemaVersion).getSchema();
+    }
+
     public static void main(String[] args) {
         IBMSchemaRegistry reg = new IBMSchemaRegistry();
-        SchemaInfo schema = reg.getSchema("simpleSchemaTest", "1.0.0");
+        SchemaInfo schema = reg.getSchemaInfo("simpleSchemaTest", "1.0.0");
 
         System.out.println(schema.toString());
     }

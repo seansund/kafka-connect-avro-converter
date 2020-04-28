@@ -28,6 +28,7 @@ import java.util.Map;
 
 
 public class AvroConverterBackup implements Converter, HeaderConverter {
+    private boolean isKey;
     private JsonConverter jsonConverter;
     private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
     private static final Logger logger = LoggerFactory.getLogger(AvroConverterBackup.class);
@@ -55,6 +56,7 @@ public class AvroConverterBackup implements Converter, HeaderConverter {
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
+        this.isKey = isKey;
         jsonConverter.configure(configs, isKey);
     }
 
