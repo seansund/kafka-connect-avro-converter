@@ -23,39 +23,26 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Map;
 
 
 public class AvroConverter implements Converter {
-    private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
     private JsonConverter jsonConverter;
     private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
+    private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
     private final IBMSchemaRegistry schemaRegistry = new IBMSchemaRegistry();
-
 
     public AvroConverter() {
         jsonConverter = new JsonConverter();
     }
-
-    /**
-     * The default schema cache size. We pick 50 so that there's room in the cache for some recurring
-     * nested types in a complex schema.
-     */
-    private Integer schemaCacheSize = 50;
 
     private org.apache.avro.Schema avroSchema = null;
     private AvroData avroDataHelper = null;
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
-        if (configs.get("schema.cache.size") instanceof Integer) {
-            schemaCacheSize = (Integer) configs.get("schema.cache.size");
-        }
 
-        avroDataHelper = new AvroData(schemaCacheSize);
-        jsonConverter.configure(configs, isKey);
     }
 
     @Override
@@ -63,39 +50,55 @@ public class AvroConverter implements Converter {
         logger.info("CONVERTING FROM CONNECT DATA");
         logger.info(topic);
 
-        logger.info("-- VALUE FROM CONNECT DATA --");
-        if (value != null) {
-            logger.info(value.toString());
+        logger.info("CONVERTING TO JSON");
+        byte[] jsonBytes = jsonConverter.fromConnectData(topic, schema, value);
+        JsonNode jsonValue = jsonDeserializer.deserialize(topic, jsonBytes);
 
-            logger.info("IBM AVRO SCHEMA");
-            org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
-            logger.info(avroSchema.toString());
-
-            logger.info("AVRO STRUCT SCHEMA");
-            Schema convertedSchema = avroDataHelper.toConnectSchema(avroSchema);
-            logger.info(convertedSchema.toString());
-
-            logger.info("-- GENERIC RECORD --");
-            GenericRecord genericRecord = (GenericRecord) avroDataHelper.fromConnectData(convertedSchema, value);
-            logger.info(genericRecord.toString());
-
-            logger.info("-- CONVERTING TO BYTE ARRAY --");
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(this.avroSchema);
-            BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
-
-            try {
-                datumWriter.write(genericRecord, encoder);
-                encoder.flush();
-            } catch (IOException e) {
-                throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
-            }
-            logger.info("flushed");
-            logger.info(Arrays.toString(stream.toByteArray()));
-            return stream.toByteArray();
+        if(jsonValue != null) {
+            logger.warn(jsonValue.toString());
         }
 
-        return new byte[0];
+//        // TODO this is to guard against stringified JSON but is there a better way
+//        ObjectMapper mapper = new ObjectMapper();
+//        try {
+//            jsonValue = jsonValue.getNodeType() == JsonNodeType.STRING ? mapper.readTree(jsonValue.asText()) : jsonValue;
+//        } catch (JsonProcessingException e) {
+//            e.printStackTrace();
+//        }
+
+        logger.info("IBM AVRO SCHEMA");
+        org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
+        logger.info(avroSchema.toString());
+
+        logger.info("-- GENERIC RECORD --");
+        GenericRecord genericRecord;
+        try {
+            DecoderFactory decoderFactory = new DecoderFactory();
+
+            Decoder decoder = decoderFactory.jsonDecoder(avroSchema, jsonValue.toString());
+            DatumReader<GenericData.Record> reader =
+                    new GenericDatumReader<>(avroSchema);
+            genericRecord = reader.read(null, decoder);
+        } catch (IOException e) {
+            throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
+        }
+        logger.warn("created generic record");
+
+        logger.info("-- CONVERTING TO BYTE ARRAY --");
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
+        BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
+
+        try {
+            datumWriter.write(genericRecord, encoder);
+            encoder.flush();
+        } catch (IOException e) {
+            throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
+        }
+        logger.info("flushed");
+        logger.info(Arrays.toString(stream.toByteArray()));
+        return stream.toByteArray();
+
     }
 
     @Override
@@ -123,7 +126,7 @@ public class AvroConverter implements Converter {
             e.printStackTrace();
         }
 
-        GenericRecord genericRecord = null;
+        GenericRecord genericRecord;
         try {
             DecoderFactory decoderFactory = new DecoderFactory();
             Decoder decoder = decoderFactory.binaryDecoder(bytes, null);

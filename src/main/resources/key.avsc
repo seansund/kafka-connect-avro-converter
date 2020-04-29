@@ -1,11 +1,5 @@
 {
   "namespace": "com.ibm.eventstreams.connect.rabbitmqsource.avro",
-  "type": "record",
-  "name": "value",
-  "fields": [
-    {
-      "name": "messageId",
-      "type": "string"
-    }
-  ]
+  "type": "string",
+  "name": "key"
 }
