@@ -64,7 +64,7 @@ public class IBMSchemaRegistry {
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, "tch-kafka-dev-ibm-es-proxy-route-bootstrap-eventstreams.tchcluster-cp4i-0143c5dd31acd8e030a1d6e0ab1380e3-0000.us-south.containers.appdomain.cloud:443");
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_SSL");
         props.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLSv1.2");
-        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/aaron.tobias@ibm.com/Documents/es-cert.jks");
+        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/crossman@us.ibm.com/Downloads/es-cert.jks");
         props.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "password");
         props.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
         String saslJaasConfig = "org.apache.kafka.common.security.plain.PlainLoginModule required "
