@@ -30,12 +30,10 @@ public class AvroConverter implements Converter {
     private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
 
     private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
-    private final IBMSchemaRegistry schemaRegistry = new IBMSchemaRegistry();
     private final JsonConverter jsonConverter = new JsonConverter();
 
+    private IBMSchemaRegistry schemaRegistry;
     private boolean isKeyConverter;
-
-    public AvroConverter() throws SchemaRegistryInitException {}
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
@@ -43,6 +41,12 @@ public class AvroConverter implements Converter {
         logger.info(configs.toString());
         jsonConverter.configure(configs, isKey);
         this.isKeyConverter = isKey;
+
+        try {
+            schemaRegistry = new IBMSchemaRegistry(configs);
+        } catch (SchemaRegistryInitException e) {
+            throw new DataException(e);
+        }
     }
 
     @Override
@@ -150,7 +154,7 @@ public class AvroConverter implements Converter {
         logger.info("-- Byte Stream --");
         DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        JsonEncoder encoder = null;
+        JsonEncoder encoder;
         try {
             encoder = EncoderFactory.get().jsonEncoder(avroSchema, stream);
         } catch (IOException e) {
