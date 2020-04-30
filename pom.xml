@@ -171,13 +171,6 @@
             <version>${kafka.version}</version>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/io.confluent/kafka-connect-avro-converter -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>kafka-connect-avro-converter</artifactId>
-            <version>5.4.1</version>
-        </dependency>
-
     </dependencies>
 
 </project>

@@ -16,8 +16,9 @@
  *
  */
 
-package com.ibm.eventstreams.connect.avroconverter;
+package com.ibm.eventstreams.connect.avroconverter.schemaregistry;
 
+import com.ibm.eventstreams.connect.avroconverter.schemaregistry.exceptions.SchemaRegistryInitException;
 import com.ibm.eventstreams.serdes.SchemaInfo;
 import com.ibm.eventstreams.serdes.SchemaRegistry;
 import com.ibm.eventstreams.serdes.SchemaRegistryConfig;
@@ -38,33 +39,29 @@ import org.slf4j.LoggerFactory;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
-import java.util.Objects;
 import java.util.Properties;
 
 public class IBMSchemaRegistry {
 
     private static final Logger logger = LoggerFactory.getLogger(IBMSchemaRegistry.class);
-    private SchemaRegistry schemaRegistry = null;
 
-    public IBMSchemaRegistry() {
+    private SchemaRegistry schemaRegistry;
+
+    public IBMSchemaRegistry() throws SchemaRegistryInitException {
         try {
             this.schemaRegistry = new SchemaRegistry(configure());
         } catch (KeyManagementException | NoSuchAlgorithmException | SchemaRegistryAuthException | SchemaRegistryServerErrorException | SchemaRegistryApiException | SchemaRegistryConnectionException e) {
-            e.printStackTrace();
+            throw new SchemaRegistryInitException(e);
         }
     }
 
     private Properties configure() {
         Properties props = new Properties();
 
-//        String trustStoreFilePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("es-cert.jks")).getPath();
-//
-//        System.out.println("TRUST STORE PATH " + trustStoreFilePath);
-
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, "tch-kafka-dev-ibm-es-proxy-route-bootstrap-eventstreams.tchcluster-cp4i-0143c5dd31acd8e030a1d6e0ab1380e3-0000.us-south.containers.appdomain.cloud:443");
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_SSL");
         props.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLSv1.2");
-        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/crossman@us.ibm.com/Downloads/es-cert.jks");
+        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/aaron.tobias@ibm.com/Documents/es-cert.jks");
         props.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "password");
         props.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
         String saslJaasConfig = "org.apache.kafka.common.security.plain.PlainLoginModule required "
@@ -85,19 +82,22 @@ public class IBMSchemaRegistry {
     }
 
     private SchemaInfo getSchemaInfo(String schemaName, String schemaVersion) {
-        SchemaInfo schema = null;
+        SchemaInfo schema;
         try {
             schema = this.schemaRegistry.getSchema(schemaName, schemaVersion);
         } catch (SchemaRegistryAuthException | SchemaRegistryConnectionException | SchemaRegistryServerErrorException | SchemaRegistryApiException e) {
-            logger.info("WE GOT HERE!!!!NOOO" + e.toString());
             throw new Error(e);
-            // TODO handle this
+            // TODO handle this, consider retrying on failure up to X times (configurable)
         }
 
         return schema;
     }
 
     public Schema getSchema(Headers headers) {
+
+        if(headers == null) {
+            return null;
+        }
 
         Iterator<Header> headerIterator = headers.iterator();
         StringDeserializer stringDeserializer = new StringDeserializer();
@@ -119,17 +119,10 @@ public class IBMSchemaRegistry {
             }
         }
 
-        logger.info("GETTING SCHEMA!!!");
+        logger.info("-- Extracted Schema Header Values --");
         logger.info(schemaName + " " + schemaVersion);
 
         return this.getSchemaInfo(schemaName, schemaVersion)
                 .getSchema();
-    }
-
-    public static void main(String[] args) {
-        IBMSchemaRegistry reg = new IBMSchemaRegistry();
-        SchemaInfo schema = reg.getSchemaInfo("simpleSchemaTest", "1.0.0");
-
-        System.out.println(schema.toString());
     }
 }
