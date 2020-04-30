@@ -3,102 +3,94 @@ package com.ibm.eventstreams.connect.avroconverter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeType;
+import com.ibm.eventstreams.connect.avroconverter.schemaregistry.IBMSchemaRegistry;
+import com.ibm.eventstreams.connect.avroconverter.schemaregistry.exceptions.SchemaRegistryInitException;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.io.*;
-import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonDeserializer;
 import org.apache.kafka.connect.storage.Converter;
-import org.apache.kafka.connect.storage.HeaderConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 
 
-public class AvroConverter implements Converter, HeaderConverter {
-    private JsonConverter jsonConverter;
-    private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
+public class AvroConverter implements Converter {
     private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
 
-    public AvroConverter() {
-        jsonConverter = new JsonConverter();
-    }
+    private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
+    private final JsonConverter jsonConverter = new JsonConverter();
 
-
-    @Override
-    public void close() {
-        jsonConverter.close();
-    }
-
-    //    TODO: throw exception when schemas is enabled
-    @Override
-    public ConfigDef config() {
-        return jsonConverter.config();
-    }
-
-    @Override
-    public void configure(Map<String, ?> configs) {
-        jsonConverter.configure(configs);
-    }
+    private IBMSchemaRegistry schemaRegistry;
+    private boolean isKeyConverter;
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
+        logger.info("Avro Converter Configurations");
+        logger.info(configs.toString());
         jsonConverter.configure(configs, isKey);
+        this.isKeyConverter = isKey;
+
+        try {
+            schemaRegistry = new IBMSchemaRegistry(configs);
+        } catch (SchemaRegistryInitException e) {
+            throw new DataException(e);
+        }
     }
 
     @Override
-    public byte[] fromConnectData(String topic, Schema schema, Object value) {
-        logger.warn(topic);
-        logger.warn(value.toString());
+    public byte[] fromConnectData(String topic, Headers headers, Schema schema, Object value) {
+        logger.info("CONVERTING FROM CONNECT DATA");
+        logger.info("-- isKey --");
+        logger.info(String.valueOf(this.isKeyConverter));
+        logger.info("-- topic --");
+        logger.info(topic);
+        logger.info("-- value --");
+        logger.info(value != null ? value.toString() : "null");
 
+        logger.info("-- Converting to JSON --");
         byte[] jsonBytes = jsonConverter.fromConnectData(topic, schema, value);
         JsonNode jsonValue = jsonDeserializer.deserialize(topic, jsonBytes);
-        logger.warn("jsonValue");
-        logger.warn(jsonValue.toString());
 
-//        TODO: improve this
-//        parse JSON payload if it is a string. Currently key is a JSON with messageId while message is a stringified Json
-        ObjectMapper mapper = new ObjectMapper();
+        if (jsonValue == null) {
+            return new byte[0];
+        }
+
+        logger.info(jsonValue.toString());
+        logger.info(jsonValue.getNodeType().toString());
+
+        if (isKeyConverter) {
+            return jsonValue.asText().getBytes();
+        }
+
+        // This is to guard against stringified JSON
+        // TODO is there a better way
         try {
-            jsonValue = jsonValue.getNodeType() == JsonNodeType.STRING ? mapper.readTree(jsonValue.asText()) : jsonValue;
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            ObjectMapper mapper = new ObjectMapper();
+            jsonValue = mapper.readTree(jsonValue.asText());
+        } catch (JsonProcessingException error) {
+            throw new DataException(error);
         }
 
-        logger.warn("jsonValue 2");
-        logger.warn(jsonValue.toString());
-        logger.warn(jsonValue.getNodeType().toString());
+        logger.info("-- IBM Avro Schema -- ");
+        org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
+        logger.info(avroSchema.toString());
 
-        org.apache.avro.Schema avroSchema = null;
-        try {
-//            TODO: figure how to get schema
-            String fileName = jsonValue.has("messageId") ? "key.avsc" : "value.avsc";
-
-            System.out.println("FILENAME: " + fileName);
-            InputStream in = this.getClass().getClassLoader().getResourceAsStream(fileName);
-            org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
-            avroSchema = parser.parse(in);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        logger.warn("avroSchema");
-        if(avroSchema != null) {
-            logger.warn(avroSchema.toString());
-        }
-
-        GenericRecord genericRecord = null;
+        logger.info("-- Generic Record --");
+        GenericRecord genericRecord;
         try {
             DecoderFactory decoderFactory = new DecoderFactory();
-
             Decoder decoder = decoderFactory.jsonDecoder(avroSchema, jsonValue.toString());
             DatumReader<GenericData.Record> reader =
                     new GenericDatumReader<>(avroSchema);
@@ -106,15 +98,11 @@ public class AvroConverter implements Converter, HeaderConverter {
         } catch (IOException e) {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
-        logger.warn("created generic record");
+        logger.info(genericRecord.toString());
 
-        if(genericRecord != null) {
-            logger.warn(genericRecord.toString());
-        }
-
-
-        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
+        logger.info("-- Byte Stream --");
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
         BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(stream, null);
 
         try {
@@ -123,25 +111,35 @@ public class AvroConverter implements Converter, HeaderConverter {
         } catch (IOException e) {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
-        logger.warn("flusssshed");
-        logger.warn(stream.toByteArray().toString());
+        logger.info(Arrays.toString(stream.toByteArray()));
+
+        logger.info("FROM CONNECT DATA CONVERSION COMPLETE!");
         return stream.toByteArray();
     }
 
     @Override
-    public SchemaAndValue toConnectData(String topic, byte[] bytes) {
-        org.apache.avro.Schema avroSchema = null;
-        try {
-//            TODO: determine schema based on header
-            String fileName = true ? "key.avsc" : "value.avsc";
-            String path = String.format("/Users/mdenunez/Documents/projects/tch/kafka-connect-avro-converter/src/main/resources/%s", fileName);
-            org.apache.avro.Schema.Parser parser = new org.apache.avro.Schema.Parser();
-            avroSchema = parser.parse(new File(path));
-        } catch (IOException e) {
-            e.printStackTrace();
+    public SchemaAndValue toConnectData(String topic, Headers headers, byte[] bytes) {
+        logger.info("CONVERSION TO CONNECT DATA");
+        logger.info("-- isKey --");
+        logger.info(String.valueOf(this.isKeyConverter));
+        logger.info("-- topic --");
+        logger.info(topic);
+        logger.info("-- value --");
+        logger.info(bytes != null ? Arrays.toString(bytes) : "null");
+
+        if (isKeyConverter) {
+            logger.info("-- Converting as JSON --");
+            SchemaAndValue sv = jsonConverter.toConnectData(topic, bytes);
+            logger.info("TO CONNECT DATA CONVERSION COMPLETE!");
+            return sv;
         }
 
-        GenericRecord genericRecord = null;
+        logger.info("-- IBM Avro Schema -- ");
+        org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
+        logger.info(avroSchema.toString());
+
+        logger.info("-- Generic Record --");
+        GenericRecord genericRecord;
         try {
             DecoderFactory decoderFactory = new DecoderFactory();
             Decoder decoder = decoderFactory.binaryDecoder(bytes, null);
@@ -151,17 +149,20 @@ public class AvroConverter implements Converter, HeaderConverter {
         } catch (IOException e) {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
+        logger.info(genericRecord.toString());
 
-        logger.warn("created generic record");
-        logger.warn(genericRecord.toString());
-
+        logger.info("-- Byte Stream --");
         DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        JsonEncoder encoder = null;
+        JsonEncoder encoder;
         try {
             encoder = EncoderFactory.get().jsonEncoder(avroSchema, stream);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new DataException("Could not encode byte stream based on avro schema: ", e);
+        }
+
+        if(encoder == null) {
+            return null;
         }
 
         try {
@@ -170,19 +171,21 @@ public class AvroConverter implements Converter, HeaderConverter {
         } catch (IOException e) {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
-        logger.warn("flusssshed");
-        logger.warn(stream.toByteArray().toString());
+        logger.warn(Arrays.toString(stream.toByteArray()));
+
+        logger.info("-- Converting as JSON --");
         SchemaAndValue jsonSchemaAndValue = jsonConverter.toConnectData(topic, stream.toByteArray());
+        logger.info("TO CONNECT DATA CONVERSION COMPLETE!");
         return jsonSchemaAndValue;
     }
 
     @Override
-    public SchemaAndValue toConnectHeader(String topic, String headerKey, byte[] value) {
-        return jsonConverter.toConnectHeader(topic, headerKey, value);
+    public byte[] fromConnectData(String topic, Schema schema, Object value) {
+        return this.fromConnectData(topic, null, schema, value);
     }
 
     @Override
-    public byte[] fromConnectHeader(String topic, String headerKey, Schema schema, Object value) {
-        return jsonConverter.fromConnectHeader(topic, headerKey, schema, value);
+    public SchemaAndValue toConnectData(String topic, byte[] bytes) {
+        return this.toConnectData(topic, null, bytes);
     }
 }
