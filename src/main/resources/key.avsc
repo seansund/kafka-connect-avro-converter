@@ -1,5 +1,6 @@
 {
   "namespace": "com.ibm.eventstreams.connect.rabbitmqsource.avro",
   "type": "string",
+  "default": null,
   "name": "key"
 }
