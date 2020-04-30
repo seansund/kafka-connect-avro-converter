@@ -10,7 +10,7 @@ import java.util.Properties;
 
 // TODO add java docs
 // TODO refactor out schema.registry prefix
-public class IBMSchemaRegistryConfig {
+public class IBMSchemaRegistryConfigBackup {
 
     /**
      *
@@ -64,22 +64,28 @@ public class IBMSchemaRegistryConfig {
 
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, configs.get(BOOTSTRAP_SERVERS_CONFIG));
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, configs.get(SECURITY_PROTOCOL_CONFIG));
+
         props.put(SslConfigs.SSL_PROTOCOL_CONFIG, configs.get(SSL_PROTOCOL_CONFIG));
-        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/Users/aaron.tobias@ibm.com/Documents/es-cert.jks");
+        props.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, configs.get(SSL_TRUSTSTORE_LOCATION_CONFIG));
         props.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, configs.get(SSL_TRUSTSTORE_PASSWORD_CONFIG));
+
+        // TODO dynamically construct based SASL Configurations
         props.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
-        String saslJaasConfig = "org.apache.kafka.common.security.plain.PlainLoginModule required "
-                + "username=\"token\" password=\"V0rn1QUy2sydGS990l66MWGhSnsumiiVmBYNj_FUsoMQ\";";
+        String saslJaasConfig = String.format("org.apache.kafka.common.security.plain.PlainLoginModule required username=\"%s\" password=\"%s\";",
+                configs.get(SASL_JAAS_USERNAME),
+                configs.get(SASL_JAAS_PASSWORD)
+        );
         props.put(SaslConfigs.SASL_JAAS_CONFIG, saslJaasConfig);
 
-        props.put(SchemaRegistryConfig.PROPERTY_API_URL, "https://tch-kafka-dev-ibm-es-rest-route-eventstreams.tchcluster-cp4i-0143c5dd31acd8e030a1d6e0ab1380e3-0000.us-south.containers.appdomain.cloud");
-        props.put(SchemaRegistryConfig.PROPERTY_API_SKIP_SSL_VALIDATION, true);
+        props.put(SchemaRegistryConfig.PROPERTY_API_URL, configs.get(PROPERTY_API_URL));
+        props.put(SchemaRegistryConfig.PROPERTY_API_SKIP_SSL_VALIDATION, configs.get(PROPERTY_API_SKIP_SSL_VALIDATION));
 
         // Set the value serializer for produced messages to use the Event Streams serializer
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "com.ibm.eventstreams.serdes.EventStreamsSerializer");
 
         // Set the encoding type used by the message serializer
+        // TODO create dynamic mapping to determine encoding type
         props.put(SchemaRegistryConfig.PROPERTY_ENCODING_TYPE, SchemaRegistryConfig.ENCODING_BINARY);
 
         return props;
