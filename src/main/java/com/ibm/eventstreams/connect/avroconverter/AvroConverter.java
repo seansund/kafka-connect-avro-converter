@@ -1,10 +1,8 @@
 package com.ibm.eventstreams.connect.avroconverter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ibm.eventstreams.connect.avroconverter.schemaregistry.IBMSchemaRegistry;
 import com.ibm.eventstreams.connect.avroconverter.schemaregistry.exceptions.SchemaRegistryInitException;
+import io.confluent.connect.avro.AvroData;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -15,7 +13,6 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.json.JsonDeserializer;
 import org.apache.kafka.connect.storage.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,19 +22,30 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
+import static org.apache.kafka.connect.data.Schema.OPTIONAL_STRING_SCHEMA;
+
 
 public class AvroConverter implements Converter {
     private static final Logger logger = LoggerFactory.getLogger(AvroConverter.class);
 
-    private final JsonDeserializer jsonDeserializer = new JsonDeserializer();
     private final JsonConverter jsonConverter = new JsonConverter();
 
     private IBMSchemaRegistry schemaRegistry;
     private boolean isKeyConverter;
 
+    private AvroData avroDataHelper = null;
+    private Integer schemaCacheSize = 50;
+
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
         logger.info("Avro Converter Configurations");
+
+        if (configs.get("schema.cache.size") instanceof Integer) {
+            schemaCacheSize = (Integer) configs.get("schema.cache.size");
+        }
+
+        avroDataHelper = new AvroData(schemaCacheSize);
+
         logger.info(configs.toString());
         jsonConverter.configure(configs, isKey);
         this.isKeyConverter = isKey;
@@ -56,31 +64,17 @@ public class AvroConverter implements Converter {
         logger.info(String.valueOf(this.isKeyConverter));
         logger.info("-- topic --");
         logger.info(topic);
+        logger.info("-- schema --");
+        logger.info(schema != null ? schema.toString() : "null");
         logger.info("-- value --");
         logger.info(value != null ? value.toString() : "null");
 
-        logger.info("-- Converting to JSON --");
-        byte[] jsonBytes = jsonConverter.fromConnectData(topic, schema, value);
-        JsonNode jsonValue = jsonDeserializer.deserialize(topic, jsonBytes);
-
-        if (jsonValue == null) {
+        if (value == null) {
             return new byte[0];
         }
 
-        logger.info(jsonValue.toString());
-        logger.info(jsonValue.getNodeType().toString());
-
         if (isKeyConverter) {
-            return jsonValue.asText().getBytes();
-        }
-
-        // This is to guard against stringified JSON
-        // TODO is there a better way
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            jsonValue = mapper.readTree(jsonValue.asText());
-        } catch (JsonProcessingException error) {
-            throw new DataException(error);
+            return value.toString().getBytes();
         }
 
         logger.info("-- IBM Avro Schema -- ");
@@ -91,7 +85,7 @@ public class AvroConverter implements Converter {
         GenericRecord genericRecord;
         try {
             DecoderFactory decoderFactory = new DecoderFactory();
-            Decoder decoder = decoderFactory.jsonDecoder(avroSchema, jsonValue.toString());
+            Decoder decoder = decoderFactory.jsonDecoder(avroSchema, value.toString());
             DatumReader<GenericData.Record> reader =
                     new GenericDatumReader<>(avroSchema);
             genericRecord = reader.read(null, decoder);
@@ -129,9 +123,9 @@ public class AvroConverter implements Converter {
 
         if (isKeyConverter) {
             logger.info("-- Converting as JSON --");
-            SchemaAndValue sv = jsonConverter.toConnectData(topic, bytes);
+
             logger.info("TO CONNECT DATA CONVERSION COMPLETE!");
-            return sv;
+            return new SchemaAndValue(OPTIONAL_STRING_SCHEMA, new String(bytes));
         }
 
         logger.info("-- IBM Avro Schema -- ");
@@ -174,7 +168,7 @@ public class AvroConverter implements Converter {
         logger.warn(Arrays.toString(stream.toByteArray()));
 
         logger.info("-- Converting as JSON --");
-        SchemaAndValue jsonSchemaAndValue = jsonConverter.toConnectData(topic, stream.toByteArray());
+        SchemaAndValue jsonSchemaAndValue = avroDataHelper.toConnectData(avroSchema, genericRecord);
         logger.info("TO CONNECT DATA CONVERSION COMPLETE!");
         return jsonSchemaAndValue;
     }
