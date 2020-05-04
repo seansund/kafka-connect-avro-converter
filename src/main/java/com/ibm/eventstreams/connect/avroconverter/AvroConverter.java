@@ -48,7 +48,7 @@ public class AvroConverter implements Converter {
 
         logger.info(configs.toString());
         jsonConverter.configure(configs, isKey);
-        this.isKeyConverter = isKey;
+        isKeyConverter = isKey;
 
         try {
             schemaRegistry = new IBMSchemaRegistry(configs);
@@ -144,28 +144,6 @@ public class AvroConverter implements Converter {
             throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
         }
         logger.info(genericRecord.toString());
-
-        logger.info("-- Byte Stream --");
-        DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(avroSchema);
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        JsonEncoder encoder;
-        try {
-            encoder = EncoderFactory.get().jsonEncoder(avroSchema, stream);
-        } catch (IOException e) {
-            throw new DataException("Could not encode byte stream based on avro schema: ", e);
-        }
-
-        if(encoder == null) {
-            return null;
-        }
-
-        try {
-            datumWriter.write(genericRecord, encoder);
-            encoder.flush();
-        } catch (IOException e) {
-            throw new DataException("Converting Kafka Connect data to byte[] failed due to serialization error: ", e);
-        }
-        logger.warn(Arrays.toString(stream.toByteArray()));
 
         logger.info("-- Converting as JSON --");
         SchemaAndValue jsonSchemaAndValue = avroDataHelper.toConnectData(avroSchema, genericRecord);
