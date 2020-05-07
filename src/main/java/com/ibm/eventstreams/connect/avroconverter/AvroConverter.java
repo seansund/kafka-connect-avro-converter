@@ -56,7 +56,10 @@ public class AvroConverter implements Converter {
             throw new DataException(e);
         }
     }
-
+    @Override
+    public byte[] fromConnectData(String topic, Schema schema, Object value) {
+        return this.fromConnectData(topic, null, schema, value);
+    }
     @Override
     public byte[] fromConnectData(String topic, Headers headers, Schema schema, Object value) {
         logger.info("CONVERTING FROM CONNECT DATA");
@@ -64,8 +67,10 @@ public class AvroConverter implements Converter {
         logger.info(String.valueOf(this.isKeyConverter));
         logger.info("-- topic --");
         logger.info(topic);
-        logger.info("-- schema --");
-        logger.info(schema != null ? schema.toString() : "null");
+        logger.info("-- Headers --");
+        logger.info(headers != null ? String.valueOf(headers): "null");
+        logger.info("-- Schema --");
+        logger.info(schema != null ? String.valueOf(schema): "null");
         logger.info("-- value --");
         logger.info(value != null ? value.toString() : "null");
 
@@ -79,6 +84,8 @@ public class AvroConverter implements Converter {
 
         logger.info("-- IBM Avro Schema -- ");
         org.apache.avro.Schema avroSchema = this.schemaRegistry.getSchema(headers);
+        if (avroSchema == null)
+            throw new NullPointerException("Avro Schema is Null" + headers);
         logger.info(avroSchema.toString());
 
         logger.info("-- Generic Record --");
@@ -151,10 +158,7 @@ public class AvroConverter implements Converter {
         return jsonSchemaAndValue;
     }
 
-    @Override
-    public byte[] fromConnectData(String topic, Schema schema, Object value) {
-        return this.fromConnectData(topic, null, schema, value);
-    }
+
 
     @Override
     public SchemaAndValue toConnectData(String topic, byte[] bytes) {

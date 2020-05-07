@@ -49,6 +49,8 @@ public class IBMSchemaRegistry {
     public IBMSchemaRegistry(Map<String, ?> configs) throws SchemaRegistryInitException {
         try {
             Properties props = IBMSchemaRegistryConfig.toProps(configs);
+            logger.info("------ Printing Properties --------");
+            logger.info(props.toString());
             this.schemaRegistry = new SchemaRegistry(props);
         } catch (KeyManagementException | NoSuchAlgorithmException | SchemaRegistryAuthException | SchemaRegistryServerErrorException | SchemaRegistryApiException | SchemaRegistryConnectionException e) {
             throw new SchemaRegistryInitException(e);
