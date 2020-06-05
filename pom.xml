@@ -76,6 +76,10 @@
             <id>confluent</id>
             <url>http://packages.confluent.io/maven/</url>
         </repository>
+        <repository>
+            <id>eventstreams-schemas-repository</id>
+            <url>https://eventstreams-cp4i-ibm-es-rest-route-eventstreams-cp4i.gse-eda-demo-202005-fa9ee67c9ab6a7791435450358e564cc-0000.us-south.containers.appdomain.cloud/files/schemas</url>
+        </repository>
     </repositories>
 
     <properties>
