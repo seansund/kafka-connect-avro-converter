@@ -20,10 +20,5 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
-    - name: maven-settings-xml-action
-      uses: whelk-io/maven-settings-xml-action@v4
-      with:
-        repositories: '[{ "id": "eventstreams-schemas-repository", "url": "https://eventstreams-cp4i-ibm-es-rest-route-eventstreams-cp4i.gse-eda-demo-202005-fa9ee67c9ab6a7791435450358e564cc-0000.us-south.containers.appdomain.cloud/files/schemas" }]'
-        servers: '[{ "id": "eventstreams-schemas-repository", "configuration": {"httpHeaders": {"property": {"name": "Authorization", "value": "Bearer $EVENT_STREAMS_SECRET"}}} }]'
     - name: Build with Maven
       run: mvn -B package --file pom.xml
