@@ -76,10 +76,10 @@
             <id>confluent</id>
             <url>http://packages.confluent.io/maven/</url>
         </repository>
-        <!-- <repository>
-            <id>eventstreams-schemas-repository</id>
-            <url>https://eventstreams-cp4i-ibm-es-rest-route-eventstreams-cp4i.gse-eda-demo-202005-fa9ee67c9ab6a7791435450358e564cc-0000.us-south.containers.appdomain.cloud/files/schemas</url>
-        </repository> -->
+        <repository>
+            <id>local-maven-repo</id>
+            <url>file:///${project.basedir}/local-maven-repo</url>
+        </repository>
     </repositories>
 
     <properties>
@@ -174,8 +174,6 @@
             <groupId>com.ibm.eventstreams.schemaregistry</groupId>
             <artifactId>event-streams-serdes</artifactId>
             <version>2019.4.2</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/event-streams-serdes-2019.4.2.jar</systemPath>
         </dependency>
 
         <dependency>
