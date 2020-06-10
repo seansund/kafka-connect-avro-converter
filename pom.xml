@@ -7,7 +7,7 @@
     <groupId>com.ibm.eventstreams.connect</groupId>
     <artifactId>kafka-connect-avro-converter</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>kafka-connect-avro-converter</name>
     <organization>
         <name>IBM Corporation</name>
